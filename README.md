@@ -1,59 +1,57 @@
-# GPUO - Git Push -u Origin
+# GPUO - Git Push-U-Origin
 
-A modern web application that automates the process of cherry-picking commits and pushing them to new branches.
-
-## Quick Start
-
-### Prerequisites
-- [Bun](https://bun.sh) runtime installed
-- Git repository initialized
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   bun install
-   cd client && bun install
-   ```
-
-3. Start the development server:
-   ```bash
-   bun run dev
-   ```
-
-4. Open your browser to `http://localhost:3000`
+A web application that automates git cherry-pick and push operations for managing commits across multiple branches.
 
 ## Features
 
-- **Cherry-Pick Automation**: Select multiple commits and push them to a new branch
-- **Branch Management**: View and manage local and remote branches
-- **Action History**: Track all cherry-pick operations with detailed status
-- **Modern UI**: Clean, responsive interface built with React and Tailwind CSS
+- **Task Management**: Create and manage cherry-pick tasks
+- **Git Integration**: Browse commits, cherry-pick to target branches
+- **Progress Tracking**: Visual progress indicators and status updates
+- **Branch Management**: Automatic branch creation and pushing
+- **Real-time Updates**: Live status updates during operations
 
 ## Tech Stack
 
-- **Frontend**: React, TypeScript, Tailwind CSS, TanStack Query
-- **Backend**: Express.js, TypeScript, SQLite
-- **Runtime**: Bun
-- **UI Components**: Radix UI, shadcn/ui
+- **Frontend**: React 18 + TypeScript + Tailwind CSS
+- **Backend**: Express.js + TypeScript
+- **Database**: SQLite
+- **Build Tool**: Vite
+- **Package Manager**: Bun
+
+## Quick Start
+
+1. **Install dependencies**:
+   ```bash
+   bun install
+   ```
+
+2. **Start development servers**:
+   ```bash
+   # Frontend (http://localhost:3000)
+   bun run dev:frontend
+   
+   # Backend (http://localhost:3001)
+   npx tsx backend/server-express.ts
+   ```
+
+3. **Or start both simultaneously**:
+   ```bash
+   npm run dev
+   ```
 
 ## Usage
 
-1. **Cherry Pick**: Select commits from the list and specify a target branch
-2. **Branches**: View all local and remote branches with their details
-3. **History**: Review all past cherry-pick operations and their status
+1. **Create a Task**: Click "Create Task" and provide a name and branch name
+2. **Add Commits**: In the task detail page, add commits by hash or browse recent commits
+3. **Cherry-pick**: Click "Cherry-pick" next to each commit to apply it to your branch
+4. **Push Branch**: Once commits are cherry-picked, push the branch to origin
 
 ## Development
 
-- `bun run dev` - Start both server and client
-- `bun run dev:server` - Start server only (port 3001)
-- `bun run dev:client` - Start client only (port 3000)
-- `bun run build` - Build for production
-
-## Documentation
-
-See [SUMMARY.md](SUMMARY.md) for detailed implementation documentation.
+The application consists of:
+- **Frontend**: React app with routing and state management
+- **Backend**: Express API with SQLite database
+- **Database**: Automatic initialization with tasks and commits tables
 
 ## License
 
