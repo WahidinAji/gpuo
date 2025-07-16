@@ -1,33 +1,48 @@
 {
   "name": "gpuo",
   "version": "1.0.0",
-  "description": "A git push -u origin <branch> automation tool with cherry-pick support",
-  "main": "server/index.ts",
+  "description": "A tool to automate git cherry-pick and push operations",
+  "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"bun run dev:server\" \"bun run dev:client\"",
-    "dev:server": "bun run --hot server/index.ts",
-    "dev:client": "bun run --cwd client dev",
-    "build": "bun run build:client && bun run build:server",
-    "build:client": "bun run --cwd client build",
-    "build:server": "bun build server/index.ts --outdir dist",
-    "start": "bun run dist/index.js",
-    "db:setup": "bun run server/db/setup.ts"
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npx tsx backend/server-express.ts",
+    "dev:frontend": "vite",
+    "build": "tsc && vite build",
+    "build:backend": "tsc backend/server-express.ts --outDir dist",
+    "start": "node dist/server-express.js",
+    "db:setup": "npx tsx backend/db/database.ts"
   },
+  "keywords": ["git", "cherry-pick", "automation", "typescript"],
+  "author": "WahidinAji",
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
+    "@tanstack/react-query": "^5.17.0",
+    "better-sqlite3": "^9.2.2",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
     "cors": "^2.8.5",
-    "sqlite3": "^5.1.6",
-    "simple-git": "^3.19.1",
-    "zod": "^3.22.4"
+    "express": "^5.1.0",
+    "lucide-react": "^0.294.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "tailwind-merge": "^2.2.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.17",
-    "@types/cors": "^2.8.14",
-    "@types/node": "^20.5.0",
-    "concurrently": "^8.2.0",
-    "typescript": "^5.1.6"
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8"
   },
-  "keywords": ["git", "automation", "cherry-pick", "push", "branch"],
-  "author": "Wahidinaji",
-  "license": "MIT"
+  "type": "module"
 }

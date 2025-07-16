@@ -42,5 +42,31 @@ I have been working on a project for a long time. Shortly, I've been working on 
 
 ## Task Page
 - Displays the task details
+- Create a new task
+- create hash commit id in the task
+- view or push the commit id into branch that is setup during create task
+
+### Create Task
+
+* step 1: create a new task
+- title
+- Directory
+- Branch
+
+after that, it will save the task to the database and in the database should have command like `cd ~/Directory && git cherry-pick `
+
+* step 2: add commits
+- commit hash id
+- can add multiple commits
+- submit -> it will save the commits to the database and do cherry pick with command from the database but with additional commit hash. e,g `cd ~/Directory && git cherry-pick commit_hash`
+
+* step 3: list of commits
+- can see the list of commits
+- there're 2 types button in a each commit
+  - push to branch
+  - view details -> it will modal/popup the commit details like the commit hash, commit message, author name, and date
+
+
+
 
 

@@ -1,247 +1,207 @@
 # GPUO Implementation Summary
 
-## Project Overview
-GPUO (Git Push -u Origin) is a modern web application that automates the process of cherry-picking commits and pushing them to new branches. This tool was built to solve the tedious manual process of cherry-picking commits and pushing them to remote repositories.
+## Overview
+GPUO (Git Push-U-Origin) is a web application that automates git cherry-pick and push operations. It helps developers manage cherry-picking commits from multiple branches into a new branch for pull requests. **The application now requires proper repository setup as the first step, ensuring all git operations are performed in the correct directory context.**
 
-## Architecture
+## Tech Stack Implemented
+- **Frontend**: React 18 with TypeScript
+- **State Management**: TanStack React Query
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **Backend**: Express.js with TypeScript
+- **Database**: SQLite with better-sqlite3
+- **Build Tool**: Vite
+- **Package Manager**: Bun
 
-### Backend (Server)
-- **Framework**: Express.js with TypeScript
-- **Database**: SQLite3 for data persistence
-- **Git Operations**: simple-git library for Git operations
-- **Validation**: Zod for request validation
-- **CORS**: Enabled for cross-origin requests
+## Features Implemented
 
-### Frontend (Client)
-- **Framework**: React 18 with TypeScript
-- **State Management**: TanStack Query (React Query) for server state
-- **Styling**: Tailwind CSS with custom design system
-- **UI Components**: Radix UI components with shadcn/ui styling
-- **Icons**: Lucide React icons
-- **Build Tool**: Vite for fast development and building
+### 1. Repository Setup (NEW - Required First Step)
+- **Status**: ✅ Completed
+- **Features**:
+  - Configure git repository directories for GPUO to work with
+  - Validate git repositories (checks for .git directory)
+  - Set active repository for cherry-pick operations
+  - Manage multiple repositories
+  - Repository path validation and error handling
+  - Automatic redirect to setup if no active repository
 
-## Key Features Implemented
+### 2. Home Page
+- **Status**: ✅ Completed
+- **Features**:
+  - **Repository Check**: Automatically redirects to setup if no active repository
+  - **Active Repository Display**: Shows current active repository information
+  - Displays a list of all tasks
+  - Shows task status (pending, in_progress, completed)
+  - Displays progress indicators for each task
+  - Shows commit count and completion status
+  - Create new task button
+  - Navigation to task details
 
-### 1. Cherry-Pick Automation
-- **Component**: `GitCommitPicker.tsx`
-- **Functionality**: 
-  - Displays recent commits from the current branch
-  - Allows multiple commit selection via checkboxes
-  - Input field for target branch name
-  - Automatic cherry-pick and push to new branch
-  - Real-time status feedback (pending, success, error)
+### 3. Create Task Page
+- **Status**: ✅ Completed
+- **Features**:
+  - Form to create new cherry-pick tasks
+  - Task name input (required)
+  - Task description input (optional)
+  - Branch name input (required) with validation
+  - **Repository Association**: Automatically links tasks to active repository
+  - Form validation and error handling
+  - Navigation back to home page
+  - Success redirect to task details
 
-### 2. Branch Management
-- **Component**: `BranchManager.tsx`
-- **Functionality**:
-  - View all local and remote branches
-  - Display branch information (name, last commit, timestamp)
-  - Refresh branch data manually
-  - Side-by-side view of local vs remote branches
+### 4. Task Detail Page
+- **Status**: ✅ Completed
+- **Features**:
+  - View task details and metadata
+  - Display branch information
+  - Show commit progress with progress bar
+  - Add commits manually by hash
+  - Browse and select from recent git commits **from the active repository**
+  - Cherry-pick individual commits **in the active repository directory**
+  - Push branch to origin **from the active repository**
+  - Real-time status updates
 
-### 3. Action History
-- **Component**: `ActionHistory.tsx`
-- **Functionality**:
-  - Complete history of all cherry-pick operations
-  - Status indicators with color coding
-  - Error message display for failed operations
-  - Timestamp tracking for all actions
+### 5. UI Components
+- **Status**: ✅ Completed
+- **Components**:
+  - Button component with variants (default, outline, destructive, secondary, ghost)
+  - Input and Textarea components
+  - Card components (Card, CardHeader, CardTitle, CardContent)
+  - Layout component with navigation (includes Setup link)
+  - Responsive design with Tailwind CSS
 
-### 4. Modern UI/UX
-- **Header**: Clean header with GPUO branding
-- **Tab Navigation**: Seamless switching between features
-- **Responsive Design**: Works on different screen sizes
-- **Loading States**: Proper loading indicators
-- **Error Handling**: User-friendly error messages
+### 6. Backend API
+- **Status**: ✅ Completed
+- **Repository Management**:
+  - `GET /api/repositories` - Get all repositories
+  - `GET /api/repositories/active` - Get active repository
+  - `POST /api/repositories` - Create new repository
+  - `POST /api/repositories/validate` - Validate git repository
+  - `POST /api/repositories/:id/activate` - Set repository as active
+  - `DELETE /api/repositories/:id` - Delete repository
+- **Task Management**:
+  - `GET /api/tasks` - Get all tasks
+  - `GET /api/tasks/:id` - Get task by ID
+  - `POST /api/tasks` - Create new task (automatically uses active repository)
+  - `PUT /api/tasks/:id` - Update task
+  - `DELETE /api/tasks/:id` - Delete task
+  - `POST /api/tasks/:id/commits` - Add commit to task
+  - `PUT /api/tasks/:id/commits/:commitId` - Update commit status
+- **Git Operations** (performed in active repository directory):
+  - `GET /api/git/commits` - Get recent git commits
+  - `GET /api/git/status` - Get git status
+  - `GET /api/git/branches` - Get all branches
+  - `POST /api/git/cherry-pick` - Cherry-pick commit
+  - `POST /api/git/push` - Push branch to origin
 
-## Database Schema
+### 7. Database Schema
+- **Status**: ✅ Completed
+- **Tables**:
+  - `repositories` table with id, name, path, is_active, timestamps
+  - `tasks` table with id, name, description, branch_name, status, repository_id, timestamps
+  - `commits` table with id, task_id, commit_hash, commit_message, status, timestamps
+  - Proper foreign key relationships and indexes
 
-### git_actions Table
-```sql
-CREATE TABLE git_actions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  branch TEXT NOT NULL,
-  commits TEXT NOT NULL,
-  status TEXT NOT NULL,
-  timestamp TEXT NOT NULL,
-  error_message TEXT
-);
-```
+### 8. Git Operations
+- **Status**: ✅ Completed
+- **Features**:
+  - **Directory-aware**: All git operations are performed in the active repository directory
+  - Fetch recent git commits from active repository
+  - Cherry-pick commits to specific branches within active repository
+  - Create new branches automatically in active repository
+  - Push branches to origin with upstream tracking from active repository
+  - Git status checking in active repository
 
-### branches Table
-```sql
-CREATE TABLE branches (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL UNIQUE,
-  is_remote BOOLEAN NOT NULL,
-  last_commit TEXT NOT NULL,
-  timestamp TEXT NOT NULL
-);
-```
-
-## API Endpoints
-
-### Git Operations
-- `GET /api/git/current-branch` - Get current git branch
-- `GET /api/git/commits` - Get recent commits
-- `POST /api/git/cherry-pick-push` - Cherry-pick and push commits
-- `POST /api/git/refresh` - Refresh git data
-
-### Branch Management
-- `GET /api/branches` - Get all branches
-
-### History
-- `GET /api/history` - Get action history
-
-## File Structure
+## Project Structure
 ```
 gpuo/
-├── client/                 # React frontend
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── GitCommitPicker.tsx
-│   │   │   ├── BranchManager.tsx
-│   │   │   ├── ActionHistory.tsx
-│   │   │   ├── Header.tsx
-│   │   │   └── ui/         # Reusable UI components
-│   │   ├── lib/
-│   │   │   ├── api.ts      # API client
-│   │   │   └── utils.ts    # Utility functions
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── index.html
-│   └── package.json
-├── server/                 # Express backend
-│   ├── routes/
-│   │   ├── git.ts
-│   │   ├── branches.ts
-│   │   └── history.ts
-│   ├── services/
-│   │   └── git.ts         # Git operations service
+├── src/
+│   ├── components/
+│   │   ├── Layout.tsx (includes Setup navigation)
+│   │   └── ui/
+│   │       ├── Button.tsx
+│   │       ├── Card.tsx
+│   │       └── Input.tsx
+│   ├── pages/
+│   │   ├── HomePage.tsx (with repository check)
+│   │   ├── CreateTaskPage.tsx
+│   │   ├── TaskDetailPage.tsx
+│   │   └── RepositorySetupPage.tsx (NEW)
+│   ├── lib/
+│   │   ├── api.ts (includes repository APIs)
+│   │   └── utils.ts
+│   ├── App.tsx (includes /setup route)
+│   └── main.tsx
+├── backend/
 │   ├── db/
-│   │   └── setup.ts       # Database setup
-│   └── index.ts
+│   │   └── database.ts (includes repositories table)
+│   ├── routes/
+│   │   ├── tasks-express.ts (repository-aware)
+│   │   ├── git-express.ts (directory-aware)
+│   │   └── repositories-express.ts (NEW)
+│   └── server-express.ts (includes repository routes)
 ├── package.json
+├── vite.config.ts
+├── tailwind.config.js
 └── tsconfig.json
 ```
 
-## Installation & Setup
-
-### Prerequisites
-- Bun runtime installed
-- Git repository initialized
-- Node.js environment
-
-### Installation Steps
-1. Clone the repository
-2. Install dependencies: `bun install`
-3. Install client dependencies: `cd client && bun install`
-4. Initialize database: `bun run db:setup`
-5. Start development: `bun run dev`
-
-### Development Commands
-- `bun run dev` - Start both server and client
-- `bun run dev:server` - Start server only
-- `bun run dev:client` - Start client only
-- `bun run build` - Build for production
-- `bun run db:setup` - Initialize database
-
-## Technology Stack Benefits
-
-### Why These Technologies?
-- **Bun**: Fast JavaScript runtime and package manager
-- **React**: Component-based UI with excellent ecosystem
-- **TanStack Query**: Powerful data fetching and caching
-- **Tailwind**: Utility-first CSS for rapid styling
-- **SQLite**: Lightweight, file-based database
-- **TypeScript**: Type safety and better developer experience
-
-## Key Implementation Details
-
-### Error Handling
-- Comprehensive error handling in both frontend and backend
-- User-friendly error messages
-- Proper HTTP status codes
-- Database transaction safety
-
-### Performance Optimization
-- React Query for efficient data fetching and caching
-- Optimistic updates for better UX
-- Lazy loading and code splitting ready
-- Efficient database queries
-
-### Security Considerations
-- Input validation using Zod
-- CORS configuration
-- SQL injection prevention
-- Error message sanitization
-
-## Future Enhancements
-
-### Potential Features
-1. **Batch Operations**: Cherry-pick multiple commit sets
-2. **Branch Templates**: Pre-configured branch naming patterns
-3. **Conflict Resolution**: UI for handling merge conflicts
-4. **Integration**: GitHub/GitLab integration
-5. **Notifications**: Real-time updates via WebSockets
-6. **User Management**: Multi-user support
-7. **Configuration**: Customizable settings
-
-### Technical Improvements
-1. **Testing**: Unit and integration tests
-2. **Documentation**: API documentation
-3. **Monitoring**: Logging and monitoring
-4. **Deployment**: Docker containerization
-5. **CI/CD**: Automated testing and deployment
-
-## Deployment
+## How to Run
 
 ### Development
-- Server runs on http://localhost:3001
-- Client runs on http://localhost:3000
-- Hot reloading enabled for both
+1. Install dependencies: `bun install`
+2. Start frontend: `bun run dev:frontend` (runs on http://localhost:3000)
+3. Start backend: `npx tsx backend/server-express.ts` (runs on http://localhost:3001)
 
-### Production Build
-```bash
-bun run build
-bun run start
-```
+### Production
+1. Build frontend: `bun run build`
+2. Build backend: `bun run build:backend`
+3. Start application: `bun run start`
 
-## Testing & Verification
+## Application Workflow
 
-### Application Status
-✅ **Server**: Running on http://localhost:3001 (Express.js + SQLite)  
-✅ **Client**: Running on http://localhost:3000 (React + Vite)  
-✅ **Database**: SQLite database created and initialized  
-✅ **Dependencies**: All packages installed successfully  
-✅ **Build System**: Vite configured with TypeScript and React  
-✅ **Styling**: Tailwind CSS with shadcn/ui components  
+### 1. Repository Setup (Required First Step)
+1. Navigate to http://localhost:3000 (auto-redirects to /setup if no active repository)
+2. Add a git repository by providing:
+   - Repository name
+   - Full path to git repository directory
+3. System validates the repository (checks for .git directory)
+4. Set repository as active
+5. System reads commits from the `.git` directory in the specified path
 
-### Component Status
-✅ **GitCommitPicker**: Cherry-pick functionality implemented  
-✅ **BranchManager**: Branch viewing and management  
-✅ **ActionHistory**: Operation history tracking  
-✅ **Header**: Application branding and navigation  
-✅ **UI Components**: Card, Button, and other UI elements  
+### 2. Task Management
+1. **Create tasks** with branch names (linked to active repository)
+2. **Add commits** to tasks (reads from active repository's git history)
+3. **Cherry-pick commits** to target branches (performed in active repository)
+4. **Push branches** to origin (from active repository)
 
-### API Endpoints Tested
-✅ **GET /api/git/current-branch** - Returns current git branch  
-✅ **GET /api/git/commits** - Returns commit history  
-✅ **POST /api/git/cherry-pick-push** - Cherry-pick and push operation  
-✅ **GET /api/branches** - Returns branch information  
-✅ **GET /api/history** - Returns action history  
-✅ **GET /health** - Health check endpoint  
+### 3. Git Operations
+- All git commands are executed in the active repository directory
+- Cherry-pick operations modify the active repository
+- Push operations push from the active repository to its origin
 
-### File Structure Verified
-✅ **Configuration Files**: All config files created  
-✅ **TypeScript**: Properly configured for both client and server  
-✅ **ESLint**: Linting configuration in place  
-✅ **Gitignore**: Comprehensive ignore rules  
-✅ **Package Files**: Dependencies managed correctly  
+## Key Features in Action
 
-## Conclusion
+1. **Repository-First Approach**: Must configure git repository before any operations
+2. **Directory-Aware Git Operations**: All git commands run in the correct repository directory
+3. **Task Management**: Create tasks with branch names, add commits, track progress
+4. **Git Integration**: Browse recent commits from active repository, cherry-pick to target branches
+5. **Real-time Updates**: Status updates as operations complete in the active repository
+6. **Progress Tracking**: Visual progress bars and completion indicators
+7. **Error Handling**: Comprehensive error handling and user feedback
 
-GPUO successfully automates the cherry-pick and push workflow with a modern, user-friendly interface. The application demonstrates best practices in full-stack development with TypeScript, React, and modern tooling. The modular architecture makes it easy to extend and maintain.
+## Future Enhancements
+- Branch conflict resolution
+- Bulk commit operations
+- Git history visualization
+- Multi-repository support (work with multiple repos simultaneously)
+- GitHub/GitLab integration
+- Automated testing
+- Docker containerization
 
-The implementation covers all requirements from the prerequisite document and provides a solid foundation for future enhancements.
+## Notes
+- **Repository setup is mandatory** - The application won't work without configuring a git repository first
+- All git operations are performed in the context of the active repository directory
+- The application uses Express.js backend instead of the originally planned Bun HTTP server due to compatibility issues
+- Database is automatically initialized on startup with repository support
+- CORS is configured for development environment
+- Git operations use child processes with proper working directory context
