@@ -295,6 +295,11 @@ export function TaskDetailPage() {
                           {commit.commit_message}
                         </p>
                       )}
+                      {commit.commit_date && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {commit.commit_date}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">

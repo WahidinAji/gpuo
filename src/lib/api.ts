@@ -28,6 +28,7 @@ export interface Commit {
   task_id: number
   commit_hash: string
   commit_message: string
+  commit_date?: string
   status: 'pending' | 'ready_to_push' | 'pushed'
   created_at: string
 }

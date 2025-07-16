@@ -166,12 +166,13 @@ router.post('/cherry-pick', async (req, res) => {
       if (currentBranch !== branchName) {
         // Checkout to target branch
         exec(`cd ${directory} && git checkout ${branchName}`, (checkoutError, _checkoutStdout, checkoutStderr) => {
+          console.log("checkoutStderr:", checkoutStderr);
           if (checkoutError) {
             return res.status(500).json({ error: `Failed to checkout branch checkoutError: ${checkoutError.message}` });
           }
-          // if (checkoutStderr) {
-          //   return res.status(500).json({ error: `Failed to checkout branch checkoutStderr: ${checkoutStderr}` });
-          // }
+          if(checkoutStderr && !checkoutStderr.includes(`Switched to branch '${branchName}'`)){
+            return res.status(500).json({ error: `Failed to checkout branch checkoutStderr: ${checkoutStderr}` });
+          }
           
           // Now cherry-pick
           performCherryPick();
@@ -208,12 +209,41 @@ router.post('/cherry-pick', async (req, res) => {
         }
         
         console.log('Git cherry-pick stdout:', stdout);
+        
+        // Parse commit message and date from cherry-pick output
+        let parsedCommitMessage = '';
+        let parsedCommitDate = '';
+        
+        if (stdout) {
+          // Extract commit message from lines like: [tocp 042d583] docs: update README with additional content
+          const commitMessageMatch = stdout.match(/\[.*?\]\s*(.+)/);
+          if (commitMessageMatch) {
+            parsedCommitMessage = commitMessageMatch[1].trim();
+          }
+          
+          // Extract date from lines like: Date: Wed Jul 16 19:59:42 2025 +0700
+          const dateMatch = stdout.match(/Date:\s*(.+)/);
+          if (dateMatch) {
+            parsedCommitDate = dateMatch[1].trim();
+          }
+        }
+        
+        console.log('Parsed commit message:', parsedCommitMessage);
+        console.log('Parsed commit date:', parsedCommitDate);
+        
         if (taskId) {
-          // Find the commit in the database and update its status
+          // Find the commit in the database and update its status, message, and date
           const commits = commitQueries.getCommitsByTaskId.all(taskId);
           const commit = commits.find((c: any) => c.commit_hash === commitHash) as any;
           if (commit) {
-            commitQueries.updateCommitStatus.run('ready_to_push', commit.id);
+            // Update with parsed information
+            commitQueries.updateCommitDetails.run(
+              parsedCommitMessage || commit.commit_message, 
+              parsedCommitDate, 
+              'ready_to_push', 
+              commit.id
+            );
+            console.log(`Updated commit ${commit.id} with message: "${parsedCommitMessage}" and date: "${parsedCommitDate}"`);
           }
         }
 
@@ -374,7 +404,7 @@ router.post('/push-commit', async (req, res) => {
       
       if (currentBranch !== branchName) {
         // Checkout to target branch
-        exec(`cd ${directory} && git checkout ${branchName}`, (checkoutError, _checkoutStdout, checkoutStderr) => {
+        exec(`cd ${directory} && git checkout ${branchName}`, (checkoutError, _checkoutStdout, _checkoutStderr) => {
           if (checkoutError) {
             return res.status(500).json({ error: `Failed to checkout branch: ${checkoutError.message}` });
           }
