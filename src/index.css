@@ -57,8 +57,3 @@
     background: hsl(var(--background));
   }
 }
-
-body {
-  color: hsl(var(--foreground));
-  background: hsl(var(--background));
-}

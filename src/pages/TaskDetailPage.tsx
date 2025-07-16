@@ -37,6 +37,7 @@ export function TaskDetailPage() {
       api.addCommitToTask(taskId, commitData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
       setCommitHash('')
       setIsAddingCommit(false)
       setShowGitCommits(false)
@@ -49,6 +50,7 @@ export function TaskDetailPage() {
       api.cherryPickCommit(commitHash, task?.branch_name || '', task?.directory || '', taskId),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
       
       // Show conflict message if there's a conflict
       if (data.hasConflict) {
@@ -73,6 +75,7 @@ export function TaskDetailPage() {
       api.pushCommit(commitHash, task?.branch_name || '', task?.directory || '', taskId, commitId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
     }
   })
 
@@ -82,6 +85,7 @@ export function TaskDetailPage() {
       api.deleteCommit(taskId, commitId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
     }
   })
 
@@ -157,6 +161,7 @@ export function TaskDetailPage() {
       api.cherryPickAbort(task?.directory || '', taskId, commitId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
       alert('Cherry-pick operation has been aborted successfully.')
     },
     onError: (error) => {
@@ -170,6 +175,7 @@ export function TaskDetailPage() {
       api.cherryPickContinue(task?.directory || '', taskId, commitId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
       alert('Cherry-pick operation completed successfully! You can now push the commit.')
     },
     onError: (error) => {
