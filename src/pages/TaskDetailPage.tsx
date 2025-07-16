@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, GitBranch, CheckCircle, Clock, Hash, Play } from 'lucide-react'
+import { ArrowLeft, Plus, GitBranch, CheckCircle, Clock, Hash, Play, Trash2 } from 'lucide-react'
 import { api, GitCommit } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -61,6 +61,15 @@ export function TaskDetailPage() {
     }
   })
 
+  // Delete commit mutation
+  const deleteCommitMutation = useMutation({
+    mutationFn: (commitId: number) => 
+      api.deleteCommit(taskId, commitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+    }
+  })
+
   const handleAddCommit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!commitHash.trim()) return
@@ -86,6 +95,12 @@ export function TaskDetailPage() {
 
   const handlePushCommit = (commitHash: string, commitId: number) => {
     pushCommitMutation.mutate({ commitHash, commitId })
+  }
+
+  const handleDeleteCommit = (commitId: number) => {
+    if (window.confirm('Are you sure you want to delete this commit?')) {
+      deleteCommitMutation.mutate(commitId)
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -331,6 +346,20 @@ export function TaskDetailPage() {
                         <CheckCircle className="h-3 w-3" />
                         <span className="text-sm">Pushed</span>
                       </div>
+                    )}
+                    
+                    {/* Show delete button for pending and ready_to_push commits */}
+                    {(commit.status === 'pending' || commit.status === 'ready_to_push') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeleteCommit(commit.id)}
+                        disabled={deleteCommitMutation.isPending}
+                        className="flex items-center space-x-1 text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span>Delete</span>
+                      </Button>
                     )}
                   </div>
                 </div>

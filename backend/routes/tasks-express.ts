@@ -161,4 +161,32 @@ router.put('/:id/commits/:commitId', (req, res) => {
   }
 });
 
+// DELETE /api/tasks/:id/commits/:commitId - Delete commit from task
+router.delete('/:id/commits/:commitId', (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const commitId = parseInt(req.params.commitId);
+
+    const existingTask = taskQueries.getTaskById.get(taskId);
+    if (!existingTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Check if commit exists
+    const commits = commitQueries.getCommitsByTaskId.all(taskId);
+    const commitExists = commits.find((c: any) => c.id === commitId);
+    if (!commitExists) {
+      return res.status(404).json({ error: 'Commit not found' });
+    }
+
+    commitQueries.deleteCommit.run(commitId);
+    const updatedCommits = commitQueries.getCommitsByTaskId.all(taskId);
+
+    res.json(updatedCommits);
+  } catch (error) {
+    console.error('Error deleting commit:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export { router as taskRoutes };

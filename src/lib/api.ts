@@ -145,6 +145,13 @@ export const api = {
     return response.json()
   },
 
+  deleteCommit: async (taskId: number, commitId: number): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/commits/${commitId}`, {
+      method: 'DELETE'
+    })
+    if (!response.ok) throw new Error('Failed to delete commit')
+  },
+
   // Git operations
   getGitCommits: async (directory: string): Promise<GitCommit[]> => {
     const response = await fetch(`${API_BASE_URL}/git/commits?directory=${encodeURIComponent(directory)}`)
