@@ -54,6 +54,16 @@ export function TaskDetailPage() {
       if (data.hasConflict) {
         alert(data.conflictMessage || 'There are conflicts, please fix them before pushing')
       }
+    },
+    onError: (error: any) => {
+      // Handle specific error types
+      if (error.type === 'LOCAL_CHANGES_CONFLICT') {
+        // Display the specific error message in a popup
+        alert(`⚠️ Local Changes Conflict\n\n${error.message}\n\nPlease commit or stash your local changes before cherry-picking.`)
+      } else {
+        // Handle generic errors
+        alert(`❌ Cherry-pick failed: ${error.message}`)
+      }
     }
   })
 

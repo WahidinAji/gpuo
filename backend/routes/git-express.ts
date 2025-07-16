@@ -114,7 +114,17 @@ router.post('/cherry-pick', async (req, res) => {
     
     if (!cherryPickResult.success) {
       console.log('Cherry-pick error:', cherryPickResult.stderr);
-      
+
+      if( cherryPickResult.stderr.includes('error: Your local changes to the following files would be overwritten by merge')) {
+        // Handle local changes conflict
+        return res.status(409).json({
+          success: false,
+          error: 'Local changes conflict',
+          // message: 'Your local changes would be overwritten by the cherry-pick. Please commit or stash them first.'
+          message: cherryPickResult.stderr,
+        });
+      }
+
       // Check if it's a conflict (cherry-pick needs manual resolution)
       if (cherryPickResult.stderr.includes('CONFLICT') || 
           cherryPickResult.stderr.includes('could not apply') ||
@@ -166,6 +176,7 @@ router.post('/cherry-pick', async (req, res) => {
         });
       }
       
+      console.log('Cherry-pick failed sdsd:', cherryPickResult.stderr);
       // Other errors are actual failures
       return res.status(500).json({ 
         success: false, 

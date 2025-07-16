@@ -183,7 +183,19 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ commitHash, branchName, directory, taskId })
     })
-    if (!response.ok) throw new Error('Failed to cherry-pick commit')
+    
+    if (!response.ok) {
+      // Try to parse the error response for detailed error information
+      try {
+        const errorData = await response.json()
+        if (errorData.error) {
+          throw new Error(errorData.message || errorData.error)
+        }
+      } catch (parseError) {
+        throw new Error(parseError instanceof Error ? parseError.message : 'Failed to parse error response')
+      }
+    }
+    
     return response.json()
   },
 
