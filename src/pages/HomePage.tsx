@@ -1,7 +1,6 @@
-import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, CheckCircle, Clock, AlertCircle, FolderOpen } from 'lucide-react'
+import { Plus, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import { api, Task } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'

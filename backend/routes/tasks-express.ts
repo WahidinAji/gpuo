@@ -1,31 +1,25 @@
 import express from 'express';
-import { taskQueries, commitQueries } from '../db/database';
-
-interface Task {
-  id: number;
-  name: string;
-  description: string;
-  directory: string;
-  branch_name: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+import { taskQueries, commitQueries } from '../db/database.js';
+import { validateRequired } from '../utils/common.js';
 
 const router = express.Router();
 
-// GET /api/tasks - Get all tasks
+const handleError = (res: express.Response, error: any, message: string) => {
+  console.error(message, error);
+  res.status(500).json({ error: 'Internal server error' });
+};
+
+// GET /api/tasks
 router.get('/', (_req, res) => {
   try {
     const tasks = taskQueries.getAllTasks.all();
     res.json(tasks);
   } catch (error) {
-    console.error('Error fetching tasks:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error fetching tasks:');
   }
 });
 
-// GET /api/tasks/:id - Get task by ID
+// GET /api/tasks/:id
 router.get('/:id', (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
@@ -36,40 +30,37 @@ router.get('/:id', (req, res) => {
     }
 
     const commits = commitQueries.getCommitsByTaskId.all(taskId);
-    
     res.json({ ...task, commits });
   } catch (error) {
-    console.error('Error fetching task:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error fetching task:');
   }
 });
 
-// POST /api/tasks - Create new task
+// POST /api/tasks
 router.post('/', (req, res) => {
   try {
     const { name, description, directory, branch_name } = req.body;
-
-    if (!name || !branch_name || !directory) {
-      return res.status(400).json({ error: 'Name, branch_name, and directory are required' });
+    
+    const validation = validateRequired(req.body, ['name', 'branch_name', 'directory']);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.error });
     }
 
     const result = taskQueries.createTask.run(name, description || '', directory, branch_name, 'pending');
     const newTask = taskQueries.getTaskById.get(result.lastInsertRowid);
-
     res.status(201).json(newTask);
   } catch (error) {
-    console.error('Error creating task:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error creating task:');
   }
 });
 
-// PUT /api/tasks/:id - Update task
+// PUT /api/tasks/:id
 router.put('/:id', (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
     const { name, description, directory, branch_name, status } = req.body;
 
-    const existingTask = taskQueries.getTaskById.get(taskId) as Task | undefined;
+    const existingTask = taskQueries.getTaskById.get(taskId) as any;
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -86,12 +77,11 @@ router.put('/:id', (req, res) => {
     const updatedTask = taskQueries.getTaskById.get(taskId);
     res.json(updatedTask);
   } catch (error) {
-    console.error('Error updating task:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error updating task:');
   }
 });
 
-// DELETE /api/tasks/:id - Delete task
+// DELETE /api/tasks/:id
 router.delete('/:id', (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
@@ -104,12 +94,11 @@ router.delete('/:id', (req, res) => {
     taskQueries.deleteTask.run(taskId);
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
-    console.error('Error deleting task:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error deleting task:');
   }
 });
 
-// POST /api/tasks/:id/commits - Add commit to task
+// POST /api/tasks/:id/commits
 router.post('/:id/commits', (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
@@ -124,7 +113,6 @@ router.post('/:id/commits', (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    // Check if commit already exists
     const existingCommit = commitQueries.checkCommitExists.get(commit_hash, taskId);
     if (existingCommit) {
       return res.status(409).json({ error: 'Commit already exists' });
@@ -132,15 +120,13 @@ router.post('/:id/commits', (req, res) => {
 
     commitQueries.createCommit.run(taskId, commit_hash, commit_message || '', 'pending');
     const commits = commitQueries.getCommitsByTaskId.all(taskId);
-
     res.status(201).json(commits);
   } catch (error) {
-    console.error('Error adding commit:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error adding commit:');
   }
 });
 
-// PUT /api/tasks/:id/commits/:commitId - Update commit status
+// PUT /api/tasks/:id/commits/:commitId
 router.put('/:id/commits/:commitId', (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
@@ -153,15 +139,13 @@ router.put('/:id/commits/:commitId', (req, res) => {
 
     commitQueries.updateCommitStatus.run(status, commitId);
     const commits = commitQueries.getCommitsByTaskId.all(taskId);
-
     res.json(commits);
   } catch (error) {
-    console.error('Error updating commit status:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error updating commit status:');
   }
 });
 
-// DELETE /api/tasks/:id/commits/:commitId - Delete commit from task
+// DELETE /api/tasks/:id/commits/:commitId
 router.delete('/:id/commits/:commitId', (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
@@ -172,7 +156,6 @@ router.delete('/:id/commits/:commitId', (req, res) => {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    // Check if commit exists
     const commits = commitQueries.getCommitsByTaskId.all(taskId);
     const commitExists = commits.find((c: any) => c.id === commitId);
     if (!commitExists) {
@@ -181,11 +164,9 @@ router.delete('/:id/commits/:commitId', (req, res) => {
 
     commitQueries.deleteCommit.run(commitId);
     const updatedCommits = commitQueries.getCommitsByTaskId.all(taskId);
-
     res.json(updatedCommits);
   } catch (error) {
-    console.error('Error deleting commit:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error deleting commit:');
   }
 });
 

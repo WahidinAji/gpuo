@@ -1,14 +1,13 @@
 import express from 'express';
-import { taskRoutes } from './routes/tasks-express';
-import { gitRoutes } from './routes/git-express';
+import { taskRoutes } from './routes/tasks-express.js';
+import { gitRoutes } from './routes/git-express.js';
+import { repositoryRoutes } from './routes/repositories-express.js';
 
 const app = express();
 const PORT = 3001;
 
 // Middleware
 app.use(express.json());
-
-// CORS middleware
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -25,23 +24,24 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/tasks', taskRoutes);
 app.use('/api/git', gitRoutes);
+app.use('/api/repositories', repositoryRoutes);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not Found' });
-});
-
-// Error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Global error handler
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
+// 404 handler - must be last
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });

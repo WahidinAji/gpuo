@@ -29,13 +29,30 @@ export interface Commit {
   commit_hash: string
   commit_message: string
   commit_date?: string
-  status: 'pending' | 'ready_to_push' | 'pushed'
+  status: 'pending' | 'ready_to_push' | 'pushed' | 'conflict'
   created_at: string
 }
 
 export interface GitCommit {
   hash: string
   message: string
+}
+
+export interface ConflictStatus {
+  success: boolean
+  cherryPickInProgress: boolean
+  hasConflicts: boolean
+  allConflictsFixed: boolean
+  conflictedFiles: string[]
+  currentCommit: string
+  currentBranch: string
+  statusMessage: string
+  detailedMessage: string
+  userAction: string
+  formattedStatusOutput: string
+  canContinue: boolean
+  needsResolution: boolean
+  rawStatusOutput: string
 }
 
 // API functions
@@ -193,6 +210,33 @@ export const api = {
       body: JSON.stringify({ commitHash, branchName, directory, taskId, commitId })
     })
     if (!response.ok) throw new Error('Failed to push commit')
+    return response.json()
+  },
+
+  // Git conflict resolution
+  cherryPickAbort: async (directory: string, taskId?: number, commitId?: number): Promise<any> => {
+    const response = await fetch(`${API_BASE_URL}/git/cherry-pick-abort`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directory, taskId, commitId })
+    })
+    if (!response.ok) throw new Error('Failed to abort cherry-pick')
+    return response.json()
+  },
+
+  cherryPickContinue: async (directory: string, taskId?: number, commitId?: number): Promise<any> => {
+    const response = await fetch(`${API_BASE_URL}/git/cherry-pick-continue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directory, taskId, commitId })
+    })
+    if (!response.ok) throw new Error('Failed to continue cherry-pick')
+    return response.json()
+  },
+
+  getConflictStatus: async (directory: string): Promise<ConflictStatus> => {
+    const response = await fetch(`${API_BASE_URL}/git/conflict-status?directory=${encodeURIComponent(directory)}`)
+    if (!response.ok) throw new Error('Failed to get conflict status')
     return response.json()
   },
 }

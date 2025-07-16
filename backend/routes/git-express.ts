@@ -1,66 +1,16 @@
 import express from 'express';
-import { spawn, exec } from 'child_process';
-import { commitQueries, taskQueries } from '../db/database';
+import { exec } from 'child_process';
+import { commitQueries, taskQueries } from '../db/database.js';
+import { executeGitCommand, parseGitCommits } from '../utils/git.js';
 
 const router = express.Router();
 
-// Helper function to get git command path
-function getGitCommand(): string {
-  // For macOS, prioritize Homebrew path
-  if (process.platform === 'darwin') {
-    return '/opt/homebrew/bin/git';
-  }
-  
-  return 'git';
-}
+const handleError = (res: express.Response, error: any, message: string) => {
+  console.error(message, error);
+  res.status(500).json({ error: 'Internal server error' });
+};
 
-// Helper function to execute git commands in a specific directory
-function executeGitCommand(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string; success: boolean }> {
-  return new Promise((resolve) => {
-    const gitCommand = getGitCommand();
-    
-    // Set up environment to include common paths
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      PATH: `${process.env.PATH}:/usr/bin:/usr/local/bin:/opt/homebrew/bin`
-    };
-    
-    const gitProcess = spawn(gitCommand, args, { 
-      stdio: 'pipe', 
-      cwd,
-      env
-    });
-    
-    let stdout = '';
-    let stderr = '';
-    
-    gitProcess.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-    
-    gitProcess.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
-    });
-    
-    gitProcess.on('close', (code: number | null) => {
-      resolve({
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        success: code === 0
-      });
-    });
-    
-    gitProcess.on('error', (error: Error) => {
-      resolve({
-        stdout: '',
-        stderr: `Failed to execute git command: ${error.message}`,
-        success: false
-      });
-    });
-  });
-}
-
-// GET /api/git/status - Get git status
+// GET /api/git/status
 router.get('/status', async (req, res) => {
   try {
     const { directory } = req.query;
@@ -70,19 +20,17 @@ router.get('/status', async (req, res) => {
     }
 
     const result = await executeGitCommand(['status', '--porcelain'], directory);
-    
     res.json({
       success: result.success,
       output: result.stdout,
       error: result.stderr
     });
   } catch (error) {
-    console.error('Error getting git status:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error getting git status:');
   }
 });
 
-// GET /api/git/branches - Get all branches
+// GET /api/git/branches
 router.get('/branches', async (req, res) => {
   try {
     const { directory } = req.query;
@@ -92,19 +40,17 @@ router.get('/branches', async (req, res) => {
     }
 
     const result = await executeGitCommand(['branch', '-a'], directory);
-    
     res.json({
       success: result.success,
       branches: result.stdout.split('\n').map(b => b.trim()).filter(b => b),
       error: result.stderr
     });
   } catch (error) {
-    console.error('Error getting branches:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error getting branches:');
   }
 });
 
-// GET /api/git/commits - Get recent commits
+// GET /api/git/commits
 router.get('/commits', async (req, res) => {
   try {
     const { directory } = req.query;
@@ -114,14 +60,7 @@ router.get('/commits', async (req, res) => {
     }
 
     const result = await executeGitCommand(['log', '--oneline', '-20'], directory);
-    
-    const commits = result.stdout.split('\n').map(line => {
-      const [hash, ...messageParts] = line.split(' ');
-      return {
-        hash,
-        message: messageParts.join(' ')
-      };
-    }).filter(commit => commit.hash);
+    const commits = parseGitCommits(result.stdout);
 
     res.json({
       success: result.success,
@@ -129,14 +68,24 @@ router.get('/commits', async (req, res) => {
       error: result.stderr
     });
   } catch (error) {
-    console.error('Error getting commits:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error getting commits:');
   }
 });
 
-// POST /api/git/cherry-pick - Cherry-pick commits
+const execCommand = (command: string, directory: string): Promise<{ stdout: string; stderr: string; success: boolean }> => {
+  return new Promise((resolve) => {
+    exec(`cd ${directory} && ${command}`, (error, stdout, stderr) => {
+      resolve({
+        stdout: stdout || '',
+        stderr: stderr || '',
+        success: !error
+      });
+    });
+  });
+};
+
+// POST /api/git/cherry-pick
 router.post('/cherry-pick', async (req, res) => {
-  console.log('Cherry-pick request received');
   try {
     const { commitHash, branchName, taskId, directory } = req.body;
 
@@ -144,173 +93,118 @@ router.post('/cherry-pick', async (req, res) => {
       return res.status(400).json({ error: 'Commit hash, branch name, and directory are required' });
     }
 
-    /**
-     * check the current branch. if current branch is not the same as branchName, checkout to branchName and no return anything if success and continue to the last step
-     * if branchName is same as current branch, skip checkout and continue to the last step
-     */
-
     // Get current branch
-    exec(`cd ${directory} && git branch --show-current`, (error, stdout, stderr) => {
-      if (error) {
-        return res.status(500).json({ error: `Failed to get current branch: ${error.message}` });
-      }
-      if (stderr) {
-        return res.status(500).json({ error: `Failed to get current branch: ${stderr}` });
-      }
+    const currentBranchResult = await execCommand('git branch --show-current', directory);
+    if (!currentBranchResult.success) {
+      return res.status(500).json({ error: 'Failed to get current branch' });
+    }
 
-      const currentBranch = stdout.trim();
-      console.log(`Current branch: ${currentBranch}`);
-      console.log(`Target branch: ${branchName}`);
-      console.log('Compare branches:', currentBranch === branchName, currentBranch !== branchName);
+    const currentBranch = currentBranchResult.stdout.trim();
+
+    // Checkout to target branch if needed
+    if (currentBranch !== branchName) {
+      const checkoutResult = await execCommand(`git checkout ${branchName}`, directory);
+      if (!checkoutResult.success) {
+        return res.status(500).json({ error: 'Failed to checkout branch' });
+      }
+    }
+
+    // Cherry-pick the commit
+    const cherryPickResult = await execCommand(`git cherry-pick ${commitHash}`, directory);
+    
+    if (!cherryPickResult.success) {
+      console.log('Cherry-pick error:', cherryPickResult.stderr);
       
-      if (currentBranch !== branchName) {
-        // Checkout to target branch
-        exec(`cd ${directory} && git checkout ${branchName}`, (checkoutError, _checkoutStdout, checkoutStderr) => {
-          console.log("checkoutStderr:", checkoutStderr);
-          if (checkoutError) {
-            return res.status(500).json({ error: `Failed to checkout branch checkoutError: ${checkoutError.message}` });
-          }
-          if(checkoutStderr && !checkoutStderr.includes(`Switched to branch '${branchName}'`)){
-            return res.status(500).json({ error: `Failed to checkout branch checkoutStderr: ${checkoutStderr}` });
-          }
-          
-          // Now cherry-pick
-          performCherryPick();
-        });
-      } else {
-        // Already on target branch, proceed with cherry-pick
-        performCherryPick();
-      }
-    });
-
-    function performCherryPick() {
-      exec(`cd ${directory} && git cherry-pick ${commitHash}`, (error, stdout, stderr) => {
-        if (error) {
-          console.error('Git cherry-pick error:', error);
-          if (stderr && stderr.includes('nothing to commit')) {
-            return res.status(200).json({
-              success: true,
-              message: 'Nothing to commit, cherry-pick already applied',
-              output: stdout
-            });
-          }
-          return res.status(500).json({ 
-            success: false, 
-            error: `Command failed: ${error.message}` 
-          });
-        }
+      // Check if it's a conflict (cherry-pick needs manual resolution)
+      if (cherryPickResult.stderr.includes('CONFLICT') || 
+          cherryPickResult.stderr.includes('could not apply') ||
+          cherryPickResult.stderr.includes('cherry-pick --continue')) {
         
-        if (stderr) {
-          console.error('Git cherry-pick stderr:', stderr);
-          return res.status(500).json({
-            success: false,
-            error: `Cherry-pick failed: ${stderr}`
-          });
-        }
-        
-        console.log('Git cherry-pick stdout:', stdout);
-        
-        // Parse commit message and date from cherry-pick output
-        let parsedCommitMessage = '';
-        let parsedCommitDate = '';
-        
-        if (stdout) {
-          // Extract commit message from lines like: [tocp 042d583] docs: update README with additional content
-          const commitMessageMatch = stdout.match(/\[.*?\]\s*(.+)/);
-          if (commitMessageMatch) {
-            parsedCommitMessage = commitMessageMatch[1].trim();
-          }
-          
-          // Extract date from lines like: Date: Wed Jul 16 19:59:42 2025 +0700
-          const dateMatch = stdout.match(/Date:\s*(.+)/);
-          if (dateMatch) {
-            parsedCommitDate = dateMatch[1].trim();
-          }
-        }
-        
-        console.log('Parsed commit message:', parsedCommitMessage);
-        console.log('Parsed commit date:', parsedCommitDate);
-        
+        // Update commit status and message even when there's a conflict
         if (taskId) {
-          // Find the commit in the database and update its status, message, and date
           const commits = commitQueries.getCommitsByTaskId.all(taskId);
           const commit = commits.find((c: any) => c.commit_hash === commitHash) as any;
+          
           if (commit) {
-            // Update with parsed information
+            // Get commit info from git log to update message and date
+            const commitInfoResult = await execCommand(`git log --format="%s|%ci" -1 ${commitHash}`, directory);
+            let commitMessage = commit.commit_message;
+            let commitDate = commit.commit_date;
+            
+            if (commitInfoResult.success && commitInfoResult.stdout) {
+              const [message, date] = commitInfoResult.stdout.split('|');
+              commitMessage = message || commit.commit_message;
+              commitDate = date ? date.trim() : commit.commit_date;
+            }
+            
+            // Update commit with conflict status and proper message/date
             commitQueries.updateCommitDetails.run(
-              parsedCommitMessage || commit.commit_message, 
-              parsedCommitDate, 
-              'ready_to_push', 
+              commitMessage, 
+              commitDate, 
+              'conflict', 
               commit.id
             );
-            console.log(`Updated commit ${commit.id} with message: "${parsedCommitMessage}" and date: "${parsedCommitDate}"`);
           }
         }
-
-        res.json({
+        
+        return res.json({
           success: true,
-          message: 'Cherry-pick successful',
-          output: stdout
+          hasConflict: true,
+          message: 'Cherry-pick has conflicts that need manual resolution',
+          conflictMessage: 'There are conflicts, please fix them before pushing',
+          output: cherryPickResult.stderr,
+          hint: 'After resolving conflicts, you can push or delete this commit'
         });
+      }
+      
+      // Check if nothing to commit (already applied)
+      if (cherryPickResult.stderr.includes('nothing to commit')) {
+        return res.json({
+          success: true,
+          message: 'Nothing to commit, cherry-pick already applied',
+          output: cherryPickResult.stdout
+        });
+      }
+      
+      // Other errors are actual failures
+      return res.status(500).json({ 
+        success: false, 
+        error: `Cherry-pick failed: ${cherryPickResult.stderr}` 
       });
     }
 
-    // // Check if branch exists, create if not
-    // const branchCheck = await executeGitCommand(['rev-parse', '--verify', branchName], directory);
-    
-    // if (!branchCheck.success) {
-    //   // Create new branch
-    //   const createBranch = await executeGitCommand(['checkout', '-b', branchName], directory);
-    //   if (!createBranch.success) {
-    //     return res.status(500).json({
-    //       success: false,
-    //       error: `Failed to create branch: ${createBranch.stderr}`
-    //     });
-    //   }
-    // } else {
-    //   // Checkout existing branch
-    //   const checkout = await executeGitCommand(['checkout', branchName], directory);
-    //   if (!checkout.success) {
-    //     return res.status(500).json({
-    //       success: false,
-    //       error: `Failed to checkout branch: ${checkout.stderr}`
-    //     });
-    //   }
-    // }
+    // Update commit in database
+    if (taskId) {
+      const commits = commitQueries.getCommitsByTaskId.all(taskId);
+      const commit = commits.find((c: any) => c.commit_hash === commitHash) as any;
+      
+      if (commit) {
+        const commitMessageMatch = cherryPickResult.stdout.match(/\[.*?\]\s*(.+)/);
+        const parsedCommitMessage = commitMessageMatch ? commitMessageMatch[1].trim() : '';
+        
+        const dateMatch = cherryPickResult.stdout.match(/Date:\s*(.+)/);
+        const parsedCommitDate = dateMatch ? dateMatch[1].trim() : '';
+        
+        commitQueries.updateCommitDetails.run(
+          parsedCommitMessage || commit.commit_message, 
+          parsedCommitDate, 
+          'ready_to_push', 
+          commit.id
+        );
+      }
+    }
 
-    // // Cherry-pick the commit
-    // const cherryPick = await executeGitCommand(['cherry-pick', commitHash], directory);
-    
-    // if (cherryPick.success) {
-    //   // Update commit status in database if taskId is provided
-    //   if (taskId) {
-    //     // Find the commit in the database and update its status
-    //     const commits = commitQueries.getCommitsByTaskId.all(taskId);
-    //     const commit = commits.find((c: any) => c.commit_hash === commitHash) as any;
-    //     if (commit) {
-    //       commitQueries.updateCommitStatus.run('completed', commit.id);
-    //     }
-    //   }
-
-    //   res.json({
-    //     success: true,
-    //     message: 'Cherry-pick successful',
-    //     output: cherryPick.stdout
-    //   });
-    // } else {
-    //   res.status(500).json({
-    //     success: false,
-    //     error: `Cherry-pick failed: ${cherryPick.stderr}`,
-    //     output: cherryPick.stdout
-    //   });
-    // }
+    res.json({
+      success: true,
+      message: 'Cherry-pick successful',
+      output: cherryPickResult.stdout
+    });
   } catch (error) {
-    console.error('Error cherry-picking commit:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error cherry-picking commit:');
   }
 });
 
-// POST /api/git/push - Push branch to origin
+// POST /api/git/push
 router.post('/push', async (req, res) => {
   try {
     const { branchName, directory, taskId } = req.body;
@@ -319,68 +213,35 @@ router.post('/push', async (req, res) => {
       return res.status(400).json({ error: 'Branch name and directory are required' });
     }
 
-    exec(`cd ${directory} && git push -u origin ${branchName}`, (error, stdout, stderr) => {
-
-      console.log("Pushing branch:", branchName);
-      console.log("Directory:", directory);
-      console.log("error:", error);
-      console.log("stdout:", stdout);
-      console.log("stderr:", stderr);
-
-      console.log(stderr !== 'Everything up-to-date');
-      console.log(stderr.length, stderr.includes('Everything up-to-date'));
-
-
-      if (error) {
-        console.error('Git push error:', error);
-        return res.status(500).json({ error: `Failed to push branch: ${error.message}` });
-      }
-
-      let checkError = true;
-      if(stderr){
-        if (stderr.includes('Everything up-to-date') || stderr.includes(`/${directory}.git`)) {
-          console.log('Push successful, no changes to push');
-          checkError = false;
-        }
-      }
-      if(stdout && stdout.includes(`branch '${branchName}' set up to track 'origin/${branchName}'`)){
-        console.log('Push successful, no changes to push');
-        checkError = false;
-      }
-      if(checkError) {
-        return res.status(500).json({
-          success: false,
-          error: `Push failed: ${stderr}`
-        });
-      }
-
-      console.log('Git push stdout:', stdout);
-      
-      console.log("taskId:", taskId);
-      // Update task status to completed after successful push
-      if (taskId) {
-        try {
-          taskQueries.updateTaskStatus.run('completed', taskId);
-          console.log(`Task ${taskId} marked as completed`);
-        } catch (dbError) {
-          console.error('Error updating task status:', dbError);
-          // Don't fail the push response if DB update fails
-        }
-      }
-      
-      res.status(200).json({
-        success: true,
-        message: 'Push successful',
-        output: stdout
+    const pushResult = await execCommand(`git push -u origin ${branchName}`, directory);
+    
+    if (!pushResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Push failed: ${pushResult.stderr}`
       });
+    }
+
+    // Update task status after successful push
+    if (taskId) {
+      try {
+        taskQueries.updateTaskStatus.run('completed', taskId);
+      } catch (dbError) {
+        console.error('Error updating task status:', dbError);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Push successful',
+      output: pushResult.stdout
     });
   } catch (error) {
-    console.error('Error pushing branch:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error pushing branch:');
   }
 });
 
-// POST /api/git/push-commit - Push a single commit
+// POST /api/git/push-commit
 router.post('/push-commit', async (req, res) => {
   try {
     const { commitHash, branchName, directory, taskId, commitId } = req.body;
@@ -389,102 +250,302 @@ router.post('/push-commit', async (req, res) => {
       return res.status(400).json({ error: 'Commit hash, branch name, directory, and commit ID are required' });
     }
 
-    // First, ensure we're on the correct branch
-    exec(`cd ${directory} && git branch --show-current`, (error, stdout, stderr) => {
-      if (error) {
-        return res.status(500).json({ error: `Failed to get current branch: ${error.message}` });
+    // Get current branch and checkout if needed
+    const currentBranchResult = await execCommand('git branch --show-current', directory);
+    if (!currentBranchResult.success) {
+      return res.status(500).json({ error: 'Failed to get current branch' });
+    }
+
+    const currentBranch = currentBranchResult.stdout.trim();
+    
+    if (currentBranch !== branchName) {
+      const checkoutResult = await execCommand(`git checkout ${branchName}`, directory);
+      if (!checkoutResult.success) {
+        return res.status(500).json({ error: 'Failed to checkout branch' });
       }
-      if (stderr) {
-        return res.status(500).json({ error: `Failed to get current branch: ${stderr}` });
-      }
+    }
 
-      const currentBranch = stdout.trim();
-      console.log(`Current branch: ${currentBranch}`);
-      console.log(`Target branch: ${branchName}`);
-      
-      if (currentBranch !== branchName) {
-        // Checkout to target branch
-        exec(`cd ${directory} && git checkout ${branchName}`, (checkoutError, _checkoutStdout, _checkoutStderr) => {
-          if (checkoutError) {
-            return res.status(500).json({ error: `Failed to checkout branch: ${checkoutError.message}` });
-          }
-          
-          // Now push the commit
-          performPushCommit();
-        });
-      } else {
-        // Already on target branch, proceed with push
-        performPushCommit();
-      }
-    });
-
-    function performPushCommit() {
-      exec(`cd ${directory} && git push -u origin ${branchName}`, (error, stdout, stderr) => {
-        console.log(`Pushing commit ${commitHash} to branch ${branchName}`);
-        console.log("Directory:", directory);
-        console.log("error:", error);
-        console.log("stdout:", stdout);
-        console.log("stderr:", stderr);
-
-        if (error) {
-          console.error('Git push error:', error);
-          return res.status(500).json({ error: `Failed to push commit: ${error.message}` });
-        }
-
-        let checkError = true;
-        if(stderr){
-          if (stderr.includes('Everything up-to-date') || stderr.includes(`/${directory}.git`)) {
-            console.log('Push successful, no changes to push');
-            checkError = false;
-          }
-        }
-        if(stdout && stdout.includes(`branch '${branchName}' set up to track 'origin/${branchName}'`)){
-          console.log('Push successful');
-          checkError = false;
-        }
-        if(checkError) {
-          return res.status(500).json({
-            success: false,
-            error: `Push failed: ${stderr}`
-          });
-        }
-
-        console.log('Git push stdout:', stdout);
-        
-        // Update commit status to pushed after successful push
-        try {
-          commitQueries.updateCommitStatus.run('pushed', commitId);
-          console.log(`Commit ${commitId} marked as pushed`);
-        } catch (dbError) {
-          console.error('Error updating commit status:', dbError);
-          // Don't fail the push response if DB update fails
-        }
-
-        // Check if all commits in the task are pushed, then mark task as completed
-        if (taskId) {
-          try {
-            const commits = commitQueries.getCommitsByTaskId.all(taskId);
-            const allPushed = commits.every((c: any) => c.status === 'pushed');
-            
-            if (allPushed) {
-              taskQueries.updateTaskStatus.run('completed', taskId);
-              console.log(`Task ${taskId} marked as completed - all commits pushed`);
-            }
-          } catch (dbError) {
-            console.error('Error updating task status:', dbError);
-          }
-        }
-        
-        res.status(200).json({
-          success: true,
-          message: 'Commit push successful',
-          output: stdout
-        });
+    // Push the commit
+    const pushResult = await execCommand(`git push -u origin ${branchName}`, directory);
+    
+    if (!pushResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Push failed: ${pushResult.stderr}`
       });
     }
+
+    // Update commit status
+    try {
+      commitQueries.updateCommitStatus.run('pushed', commitId);
+      
+      // Check if all commits are pushed, then mark task as completed
+      if (taskId) {
+        const commits = commitQueries.getCommitsByTaskId.all(taskId);
+        const allPushed = commits.every((c: any) => c.status === 'pushed');
+        
+        if (allPushed) {
+          taskQueries.updateTaskStatus.run('completed', taskId);
+        }
+      }
+    } catch (dbError) {
+      console.error('Error updating commit/task status:', dbError);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Commit push successful',
+      output: pushResult.stdout
+    });
   } catch (error) {
-    console.error('Error pushing commit:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    handleError(res, error, 'Error pushing commit:');
+  }
+});
+
+// POST /api/git/cherry-pick-abort - Abort cherry-pick operation
+router.post('/cherry-pick-abort', async (req, res) => {
+  try {
+    const { directory, taskId, commitId } = req.body;
+
+    if (!directory) {
+      return res.status(400).json({ error: 'Directory is required' });
+    }
+
+    const abortResult = await execCommand('git cherry-pick --abort', directory);
+    
+    if (!abortResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to abort cherry-pick: ${abortResult.stderr}`
+      });
+    }
+
+    // Update commit status back to pending
+    if (taskId && commitId) {
+      try {
+        commitQueries.updateCommitStatus.run('pending', commitId);
+      } catch (dbError) {
+        console.error('Error updating commit status:', dbError);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Cherry-pick aborted successfully',
+      output: abortResult.stdout
+    });
+  } catch (error) {
+    handleError(res, error, 'Error aborting cherry-pick:');
+  }
+});
+
+// POST /api/git/cherry-pick-continue - Continue cherry-pick after resolving conflicts
+router.post('/cherry-pick-continue', async (req, res) => {
+  try {
+    const { directory, taskId, commitId } = req.body;
+
+    if (!directory) {
+      return res.status(400).json({ error: 'Directory is required' });
+    }
+
+    // First add all resolved files
+    const addResult = await execCommand('git add .', directory);
+    if (!addResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to add resolved files: ${addResult.stderr}`
+      });
+    }
+
+    // Continue cherry-pick
+    const continueResult = await execCommand('git cherry-pick --continue', directory);
+    
+    if (!continueResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to continue cherry-pick: ${continueResult.stderr}`
+      });
+    }
+
+    // Update commit status to ready_to_push
+    if (taskId && commitId) {
+      try {
+        commitQueries.updateCommitStatus.run('ready_to_push', commitId);
+      } catch (dbError) {
+        console.error('Error updating commit status:', dbError);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Cherry-pick continued successfully',
+      output: continueResult.stdout
+    });
+  } catch (error) {
+    handleError(res, error, 'Error continuing cherry-pick:');
+  }
+});
+
+// GET /api/git/conflict-status - Check detailed conflict status with user-friendly messages
+router.get('/conflict-status', async (req, res) => {
+  try {
+    const { directory } = req.query;
+    
+    if (!directory || typeof directory !== 'string') {
+      return res.status(400).json({ error: 'Directory parameter is required' });
+    }
+
+    // Get full git status with more details
+    const statusResult = await execCommand('git status', directory);
+    
+    if (!statusResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: `Failed to get git status: ${statusResult.stderr}`
+      });
+    }
+
+    const statusOutput = statusResult.stdout;
+    
+    // Check if cherry-pick is in progress
+    const cherryPickInProgress = statusOutput.includes('currently cherry-picking');
+    
+    // Check for different conflict states
+    const hasUnmergedPaths = statusOutput.includes('Unmerged paths:');
+    const allConflictsFixed = statusOutput.includes('all conflicts fixed: run "git cherry-pick --continue"');
+    const hasConflicts = hasUnmergedPaths && !allConflictsFixed;
+    
+    // Extract conflicted files with better parsing
+    const conflictedFiles: string[] = [];
+    if (hasUnmergedPaths) {
+      const lines = statusOutput.split('\n');
+      let inUnmergedSection = false;
+      
+      for (const line of lines) {
+        if (line.includes('Unmerged paths:')) {
+          inUnmergedSection = true;
+          continue;
+        }
+        
+        if (inUnmergedSection && line.trim() === '') {
+          break;
+        }
+        
+        if (inUnmergedSection) {
+          // Handle different conflict indicators
+          if (line.includes('both modified:')) {
+            const file = line.split('both modified:')[1]?.trim();
+            if (file) conflictedFiles.push(file);
+          } else if (line.includes('added by us:')) {
+            const file = line.split('added by us:')[1]?.trim();
+            if (file) conflictedFiles.push(file);
+          } else if (line.includes('added by them:')) {
+            const file = line.split('added by them:')[1]?.trim();
+            if (file) conflictedFiles.push(file);
+          } else if (line.includes('deleted by us:')) {
+            const file = line.split('deleted by us:')[1]?.trim();
+            if (file) conflictedFiles.push(file);
+          } else if (line.includes('deleted by them:')) {
+            const file = line.split('deleted by them:')[1]?.trim();
+            if (file) conflictedFiles.push(file);
+          }
+        }
+      }
+    }
+
+    // Extract current commit being cherry-picked
+    let currentCommit = '';
+    const commitMatch = statusOutput.match(/You are currently cherry-picking commit ([a-f0-9]+)/);
+    if (commitMatch) {
+      currentCommit = commitMatch[1];
+    }
+
+    // Extract branch information
+    let currentBranch = '';
+    const branchMatch = statusOutput.match(/Your branch is up to date with '([^']+)'/);
+    if (branchMatch) {
+      currentBranch = branchMatch[1];
+    } else {
+      // Alternative pattern for branch name
+      const branchMatch2 = statusOutput.match(/On branch (.+)/);
+      if (branchMatch2) {
+        currentBranch = branchMatch2[1];
+      }
+    }
+
+    // Determine status message with more context
+    let statusMessage = '';
+    let detailedMessage = '';
+    let canContinue = false;
+    let needsResolution = false;
+    let userAction = '';
+    
+    if (cherryPickInProgress) {
+      if (allConflictsFixed) {
+        statusMessage = 'All conflicts have been resolved';
+        detailedMessage = 'All conflicts have been resolved. You can now continue the cherry-pick operation.';
+        userAction = 'Click "Continue" to complete the cherry-pick, then return to the app to push the commit.';
+        canContinue = true;
+      } else if (hasConflicts) {
+        statusMessage = `Cherry-pick has ${conflictedFiles.length} unresolved conflict(s)`;
+        detailedMessage = `There are ${conflictedFiles.length} file(s) with unresolved conflicts that need manual resolution.`;
+        userAction = 'Please resolve the conflicts in your code editor, then use "git add <file>" to mark them as resolved, and return to the app to continue.';
+        needsResolution = true;
+      } else {
+        statusMessage = 'Cherry-pick operation is in progress';
+        detailedMessage = 'Cherry-pick operation is in progress but status is unclear.';
+        userAction = 'Please check the git status manually or contact support.';
+      }
+    } else {
+      statusMessage = 'No cherry-pick operation in progress';
+      detailedMessage = 'No cherry-pick operation is currently in progress.';
+      userAction = 'You can safely proceed with other operations.';
+    }
+
+    // Build formatted status output for display
+    let formattedStatusOutput = '';
+    if (cherryPickInProgress) {
+      formattedStatusOutput += `Status: ${statusMessage}\n\n`;
+      
+      if (currentBranch) {
+        formattedStatusOutput += `Branch: ${currentBranch}\n`;
+      }
+      
+      if (currentCommit) {
+        formattedStatusOutput += `Cherry-picking commit: ${currentCommit}\n\n`;
+      }
+      
+      if (needsResolution && conflictedFiles.length > 0) {
+        formattedStatusOutput += `Files with conflicts:\n`;
+        conflictedFiles.forEach(file => {
+          formattedStatusOutput += `  • ${file}\n`;
+        });
+        formattedStatusOutput += `\n`;
+      }
+      
+      formattedStatusOutput += `Next steps: ${userAction}`;
+    } else {
+      formattedStatusOutput = statusMessage;
+    }
+
+    res.json({
+      success: true,
+      cherryPickInProgress,
+      hasConflicts,
+      allConflictsFixed,
+      conflictedFiles,
+      currentCommit,
+      currentBranch,
+      statusMessage,
+      detailedMessage,
+      userAction,
+      formattedStatusOutput,
+      canContinue,
+      needsResolution,
+      rawStatusOutput: statusOutput
+    });
+  } catch (error) {
+    handleError(res, error, 'Error checking conflict status:');
   }
 });
 

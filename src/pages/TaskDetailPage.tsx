@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, GitBranch, CheckCircle, Clock, Hash, Play, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, GitBranch, CheckCircle, Clock, Hash, Play, Trash2, AlertCircle } from 'lucide-react'
 import { api, GitCommit } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -47,8 +47,13 @@ export function TaskDetailPage() {
   const cherryPickMutation = useMutation({
     mutationFn: (commitHash: string) => 
       api.cherryPickCommit(commitHash, task?.branch_name || '', task?.directory || '', taskId),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      
+      // Show conflict message if there's a conflict
+      if (data.hasConflict) {
+        alert(data.conflictMessage || 'There are conflicts, please fix them before pushing')
+      }
     }
   })
 
@@ -67,6 +72,98 @@ export function TaskDetailPage() {
       api.deleteCommit(taskId, commitId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+    }
+  })
+
+  // Conflict status check mutation
+  const conflictStatusMutation = useMutation({
+    mutationFn: () => api.getConflictStatus(task?.directory || ''),
+    onSuccess: (data) => {
+      if (data.cherryPickInProgress) {
+        if (data.allConflictsFixed) {
+          // Show success message when all conflicts are resolved
+          const message = `✅ All conflicts have been resolved!\n\n` +
+            `Current status: ${data.statusMessage}\n` +
+            `Cherry-picking commit: ${data.currentCommit}\n\n` +
+            `Next steps:\n` +
+            `1. Click "Continue" to complete the cherry-pick operation\n` +
+            `2. Return to the app to push the commit\n\n` +
+            `The git status shows: "all conflicts fixed: run 'git cherry-pick --continue'"`;
+          
+          if (window.confirm(message + '\n\nWould you like to continue the cherry-pick now?')) {
+            const commit = task?.commits?.find(c => c.status === 'conflict');
+            if (commit) {
+              handleContinueCherryPick(commit.id);
+            }
+          }
+        } else if (data.needsResolution) {
+          // Show detailed conflict information
+          let message = `⚠️ Cherry-pick conflicts detected!\n\n` +
+            `Status: ${data.statusMessage}\n` +
+            `Branch: ${data.currentBranch || 'Unknown'}\n` +
+            `Cherry-picking commit: ${data.currentCommit}\n\n`;
+          
+          if (data.conflictedFiles.length > 0) {
+            message += `Files with conflicts (${data.conflictedFiles.length}):\n`;
+            data.conflictedFiles.forEach((file: string) => {
+              message += `  • ${file}\n`;
+            });
+            message += `\n`;
+          }
+          
+          message += `Next steps:\n` +
+            `1. Open your code editor and resolve the conflicts in the files listed above\n` +
+            `2. Look for conflict markers like <<<<<<< HEAD, =======, and >>>>>>>\n` +
+            `3. Edit the files to choose the correct code\n` +
+            `4. Save the files after resolving conflicts\n` +
+            `5. Use "git add <file>" to mark resolved files as staged\n` +
+            `6. Return to this app and click "Continue" to complete the cherry-pick\n\n` +
+            `Or click "Abort" to cancel the cherry-pick operation.\n\n` +
+            `Raw git status:\n${data.rawStatusOutput}`;
+          
+          alert(message);
+        } else {
+          // Generic in-progress message
+          const message = `🔄 Cherry-pick operation in progress\n\n` +
+            `Status: ${data.statusMessage}\n` +
+            `Details: ${data.detailedMessage}\n\n` +
+            `Action needed: ${data.userAction}\n\n` +
+            `Raw git status:\n${data.rawStatusOutput}`;
+          
+          alert(message);
+        }
+      } else {
+        alert('ℹ️ No cherry-pick operation in progress.\n\nYou can safely proceed with other operations.');
+      }
+    },
+    onError: (error) => {
+      alert(`❌ Error checking conflict status: ${error.message}`);
+    }
+  })
+
+  // Cherry-pick abort mutation
+  const cherryPickAbortMutation = useMutation({
+    mutationFn: ({ commitId }: { commitId: number }) => 
+      api.cherryPickAbort(task?.directory || '', taskId, commitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      alert('Cherry-pick operation has been aborted successfully.')
+    },
+    onError: (error) => {
+      alert(`Error aborting cherry-pick: ${error.message}`)
+    }
+  })
+
+  // Cherry-pick continue mutation
+  const cherryPickContinueMutation = useMutation({
+    mutationFn: ({ commitId }: { commitId: number }) => 
+      api.cherryPickContinue(task?.directory || '', taskId, commitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+      alert('Cherry-pick operation completed successfully! You can now push the commit.')
+    },
+    onError: (error) => {
+      alert(`Error continuing cherry-pick: ${error.message}`)
     }
   })
 
@@ -103,12 +200,30 @@ export function TaskDetailPage() {
     }
   }
 
+  const handleCheckConflictStatus = () => {
+    conflictStatusMutation.mutate()
+  }
+
+  const handleAbortCherryPick = (commitId: number) => {
+    if (window.confirm('Are you sure you want to abort the cherry-pick operation?\n\nThis will discard all changes and return to the original state.')) {
+      cherryPickAbortMutation.mutate({ commitId })
+    }
+  }
+
+  const handleContinueCherryPick = (commitId: number) => {
+    if (window.confirm('Continue cherry-pick operation?\n\nMake sure you have resolved all conflicts and staged the changes (git add).')) {
+      cherryPickContinueMutation.mutate({ commitId })
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pushed':
         return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'ready_to_push':
         return <Clock className="h-4 w-4 text-blue-500" />
+      case 'conflict':
+        return <AlertCircle className="h-4 w-4 text-red-500" />
       default:
         return <Clock className="h-4 w-4 text-orange-500" />
     }
@@ -120,6 +235,8 @@ export function TaskDetailPage() {
         return 'bg-green-100 text-green-800'
       case 'ready_to_push':
         return 'bg-blue-100 text-blue-800'
+      case 'conflict':
+        return 'bg-red-100 text-red-800'
       default:
         return 'bg-orange-100 text-orange-800'
     }
@@ -347,9 +464,45 @@ export function TaskDetailPage() {
                         <span className="text-sm">Pushed</span>
                       </div>
                     )}
+                    {commit.status === 'conflict' && (
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1 text-red-600">
+                          <AlertCircle className="h-3 w-3" />
+                          <span className="text-sm">Conflict - Needs Resolution</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleCheckConflictStatus()}
+                          disabled={conflictStatusMutation.isPending}
+                          className="flex items-center space-x-1"
+                          variant="outline"
+                        >
+                          <AlertCircle className="h-3 w-3" />
+                          <span>Check Status</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleAbortCherryPick(commit.id)}
+                          disabled={cherryPickAbortMutation.isPending}
+                          className="flex items-center space-x-1"
+                          variant="destructive"
+                        >
+                          <span>Abort</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleContinueCherryPick(commit.id)}
+                          disabled={cherryPickContinueMutation.isPending}
+                          className="flex items-center space-x-1"
+                          variant="default"
+                        >
+                          <span>Continue</span>
+                        </Button>
+                      </div>
+                    )}
                     
-                    {/* Show delete button for pending and ready_to_push commits */}
-                    {(commit.status === 'pending' || commit.status === 'ready_to_push') && (
+                    {/* Show delete button for pending, ready_to_push, and conflict commits */}
+                    {(commit.status === 'pending' || commit.status === 'ready_to_push' || commit.status === 'conflict') && (
                       <Button
                         size="sm"
                         variant="outline"

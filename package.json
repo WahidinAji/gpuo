@@ -8,7 +8,7 @@
     "dev:backend": "npx tsx backend/server-express.ts",
     "dev:frontend": "vite",
     "build": "tsc && vite build",
-    "build:backend": "tsc backend/server-express.ts --outDir dist",
+    "build:backend": "tsc --project tsconfig.backend.json",
     "start": "node dist/server-express.js",
     "db:setup": "npx tsx backend/db/database.ts"
   },
