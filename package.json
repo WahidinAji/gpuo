@@ -4,20 +4,19 @@
   "description": "A tool to automate git cherry-pick and push operations",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "npx tsx backend/server-express.ts",
-    "dev:frontend": "vite",
+    "dev": "concurrently \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "dev:backend": "bun run backend/server-express.ts",
+    "dev:frontend": "bun run --bun vite",
     "build": "tsc && vite build",
     "build:backend": "tsc --project tsconfig.backend.json",
     "start": "node dist/server-express.js",
-    "db:setup": "npx tsx backend/db/database.ts"
+    "db:setup": "bun run backend/db/database.ts"
   },
   "keywords": ["git", "cherry-pick", "automation", "typescript"],
   "author": "WahidinAji",
   "license": "MIT",
   "dependencies": {
     "@tanstack/react-query": "^5.56.2",
-    "better-sqlite3": "^9.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
@@ -29,18 +28,17 @@
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.11",
+    "@types/bun": "^1.2.19",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "bun-types": "^1.2.19",
     "concurrently": "^8.2.2",
     "postcss": "^8.4.45",
     "tailwindcss": "^3.4.10",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.19.1",
     "typescript": "^5.6.2",
     "vite": "^5.4.6"
   },

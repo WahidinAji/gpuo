@@ -63,4 +63,4 @@ coverage/
 
 
 .DS_Store
-*db
+*.db.backup.ts

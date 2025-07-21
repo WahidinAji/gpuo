@@ -31,7 +31,7 @@ A web application that automates git cherry-pick and push operations for managin
    bun run dev:frontend
    
    # Backend (http://localhost:3001)
-   npx tsx backend/server-express.ts
+   bun run dev:backend
    ```
 
 3. **Or start both simultaneously**:
