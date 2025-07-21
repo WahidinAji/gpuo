@@ -148,7 +148,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(commit)
     })
-    if (!response.ok) throw new Error('Failed to add commit')
+    if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to add commit')
+    }
     return response.json()
   },
 

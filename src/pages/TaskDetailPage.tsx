@@ -41,6 +41,9 @@ export function TaskDetailPage() {
       setCommitHash('')
       setIsAddingCommit(false)
       setShowGitCommits(false)
+    },
+    onError: (error) => {
+      alert(`Error adding commit: ${error.message}`)
     }
   })
 
