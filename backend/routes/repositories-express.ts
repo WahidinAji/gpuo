@@ -1,5 +1,5 @@
 import express from 'express';
-import { repositoryQueries } from '../db/database.js';
+import { repositoryQueries } from '../db/database';
 import { spawn } from 'child_process';
 import { existsSync, statSync } from 'fs';
 import { join } from 'path';

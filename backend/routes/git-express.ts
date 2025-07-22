@@ -1,7 +1,7 @@
 import express from 'express';
 import { exec } from 'child_process';
-import { commitQueries, taskQueries } from '../db/database.js';
-import { executeGitCommand, parseGitCommits } from '../utils/git.js';
+import { commitQueries, taskQueries } from '../db/database';
+import { executeGitCommand, parseGitCommits } from '../utils/git';
 
 const router = express.Router();
 

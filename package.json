@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"bun run dev:backend\" \"bun run dev:frontend\"",
-    "dev:backend": "bun run backend/server-express.ts",
+    "dev:backend": "bun --hot backend/server-express.ts",
     "dev:frontend": "bun run --bun vite",
     "build": "tsc && vite build",
     "build:backend": "tsc --project tsconfig.backend.json",

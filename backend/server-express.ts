@@ -1,7 +1,7 @@
 import express from 'express';
-import { taskRoutes } from './routes/tasks-express.js';
-import { gitRoutes } from './routes/git-express.js';
-import { repositoryRoutes } from './routes/repositories-express.js';
+import { taskRoutes } from './routes/tasks-express';
+import { gitRoutes } from './routes/git-express';
+import { repositoryRoutes } from './routes/repositories-express';
 
 const app = express();
 const PORT = 3001;
@@ -28,7 +28,7 @@ app.use('/api/repositories', repositoryRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Global error handler
@@ -43,5 +43,6 @@ app.use((_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📊 Health check available at http://localhost:${PORT}/api/health`);
 });

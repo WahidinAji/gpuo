@@ -1,6 +1,6 @@
 import express from 'express';
-import { taskQueries, commitQueries } from '../db/database.js';
-import { validateRequired } from '../utils/common.js';
+import { taskQueries, commitQueries } from '../db/database';
+import { validateRequired } from '../utils/common';
 
 const router = express.Router();
 
